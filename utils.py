@@ -2,17 +2,71 @@ import os
 import cv2
 import torch
 import numpy
-
+import torch.nn as nn
 from PIL import Image
 from torchvision import transforms
 import xml.etree.ElementTree as ET
 
 
-device = "cpu"
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-elif torch.backends.mps.is_available():
-    device = torch.device("mps")
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "cpu"
+    if torch.backends.mps.is_available()
+    else "cpu"
+)
+model_path = "m_alex_net.pth"
+
+
+class mAlexNet(nn.Module):
+    def __init__(self, num_classes=2):
+        super().__init__()
+        self.input_channel = 3
+        self.num_output = num_classes
+        self.layer1 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=self.input_channel,
+                out_channels=16,
+                kernel_size=11,
+                stride=4,
+            ),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+        )
+
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(in_channels=16, out_channels=20, kernel_size=5, stride=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+        )
+
+        self.layer3 = nn.Sequential(
+            nn.Conv2d(in_channels=20, out_channels=30, kernel_size=3, stride=1),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2),
+        )
+
+        self.layer4 = nn.Sequential(
+            nn.Linear(30 * 3 * 3, out_features=48), nn.ReLU(inplace=True)
+        )
+
+        self.layer5 = nn.Sequential(
+            nn.Linear(in_features=48, out_features=self.num_output)
+        )
+
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = x.view(x.size(0), -1)
+        x = self.layer4(x)
+        logits = self.layer5(x)
+        return logits
+
+
+model = mAlexNet(num_classes=2).to(device)
+model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
+model.eval()
 
 
 def extract_bndbox_values(tree):
@@ -63,10 +117,6 @@ def predict(image_path, xml_dir, require_parsing):
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ]
     )
-
-    model = torch.load("full_256_alex_net_pk_lot.pth", map_location=device)
-    model.eval()
-    model.to(device)
 
     for key in bndbox_values:
         values = bndbox_values[key]

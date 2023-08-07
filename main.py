@@ -9,7 +9,6 @@ from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-
 origins = [
     "*",
 ]
