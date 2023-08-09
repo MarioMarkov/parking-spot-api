@@ -1,18 +1,14 @@
 import io
 import cv2
 import base64
-from utils import predict
+from utils import predict, predictv2
 from PIL import Image as PILImage
 import xml.etree.ElementTree as ET
 from fastapi import FastAPI, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+import time
 
 app = FastAPI()
-
-
-# model = mAlexNet(num_classes=2).to(device)
-# model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
-# model.eval()
 
 origins = [
     "*",
@@ -34,22 +30,31 @@ async def home():
 
 @app.post("/prediction/")
 async def get_prediction(image: UploadFile, annotations: UploadFile):
+    start_time = time.time()
+
     # Read bites image to Pillow image
     image_obj = PILImage.open(io.BytesIO(await image.read()))
 
     # Read annotations
     xml_obj = ET.parse(io.BytesIO(await annotations.read()))
+    print("Encoding data time: %s seconds" % (time.time() - start_time))
 
     # Get predicted image
-    result_image = predict(image_obj, xml_obj, require_parsing=False)
+    start_time = time.time()
+    result_image = predictv2(image_obj, xml_obj)
+    print("Get prediction time: %s seconds" % (time.time() - start_time))
 
+    start_time = time.time()
     # Encode image to display it back in the interface
-    _, encoded_img = cv2.imencode(".PNG", result_image)
-    encoded_img = base64.b64encode(encoded_img)
+    _, encoded_img = cv2.imencode(".JPEG", result_image)
+    # encoded_img = base64.b64encode(encoded_img)
+    encoded_img_base64 = base64.b64encode(encoded_img)
 
+    print("Decoding data time: %s seconds" % (time.time() - start_time))
+
+    # return encoded_img_base64
     return {
-        "filename": image.filename,
-        "encoded_img": encoded_img,
+        "encoded_img": encoded_img_base64,
     }
 
 

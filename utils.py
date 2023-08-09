@@ -1,13 +1,13 @@
 import os
 import cv2
+import torch
 import numpy as np
 from PIL import Image
-from torchvision import transforms
 import xml.etree.ElementTree as ET
+from torch.utils.data import DataLoader
 import time
 import onnxruntime
-import torch
-import torch.nn as nn
+from model_utils import mAlexNet, BatchImages, transform
 device = (
     "cuda"
     if torch.cuda.is_available()
@@ -15,6 +15,7 @@ device = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
+print("Device is:",device)
 model_path = "m_alex_net.pth"
 
 
@@ -24,85 +25,90 @@ def to_numpy(tensor):
     )
 
 
-print("loading model...")
-
-
-class mAlexNet(nn.Module):
-    def __init__(self, num_classes=2):
-        super().__init__()
-        self.input_channel = 3
-        self.num_output = num_classes
-        self.layer1 = nn.Sequential(
-            nn.Conv2d(
-                in_channels=self.input_channel,
-                out_channels=16,
-                kernel_size=11,
-                stride=4,
-            ),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),
-        )
-
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(in_channels=16, out_channels=20, kernel_size=5, stride=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),
-        )
-
-        self.layer3 = nn.Sequential(
-            nn.Conv2d(in_channels=20, out_channels=30, kernel_size=3, stride=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),
-        )
-
-        self.layer4 = nn.Sequential(
-            nn.Linear(30 * 3 * 3, out_features=48), nn.ReLU(inplace=True)
-        )
-
-        self.layer5 = nn.Sequential(
-            nn.Linear(in_features=48, out_features=self.num_output)
-        )
-
-    def forward(self, x):
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = x.view(x.size(0), -1)
-        x = self.layer4(x)
-        logits = self.layer5(x)
-        return logits
-
+print("Loading model...")
 
 #ort_session = onnxruntime.InferenceSession("onxx_malex_net.onnx")
 
 model = mAlexNet(num_classes=2).to(device)
 model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
-
 model.eval()
 
 
 def extract_bndbox_values(tree):
     root = tree.getroot()
-    bndbox_values = {}
-
-    for i, obj in enumerate(root.findall("object")):
-        bndbox = obj.find("bndbox")
-        name = obj.find("name").text
-
-        xmin = float(bndbox.find("xmin").text)
-        ymin = float(bndbox.find("ymin").text)
-        xmax = float(bndbox.find("xmax").text)
-        ymax = float(bndbox.find("ymax").text)
-        bndbox_values[name + str(i)] = {
-            "xmin": xmin,
-            "ymin": ymin,
-            "xmax": xmax,
-            "ymax": ymax,
+    bndbox_values = {
+        f"{obj.find('name').text}{i}": {
+            "xmin": float(obj.find("bndbox/xmin").text),
+            "ymin": float(obj.find("bndbox/ymin").text),
+            "xmax": float(obj.find("bndbox/xmax").text),
+            "ymax": float(obj.find("bndbox/ymax").text),
         }
-
+        for i, obj in enumerate(root.findall("object"))
+    }
     return bndbox_values
 
+def predictv2(image_path, xml_dir):
+    full_image = image_path
+    bndbox_values = extract_bndbox_values(xml_dir)
+    pil_image = full_image.convert("RGB")
+    open_cv_image = np.array(pil_image)
+    # Convert RGB to BGR
+    image_to_draw = open_cv_image[:, :, ::-1].copy()
+    
+    # Every key is one spot
+    all_spots_keys = list(bndbox_values.keys())
+    num_keys = len(all_spots_keys)
+    batch_size = 16
+    
+    # Make dictionary with every spot as key and value which will be the prediction
+    spots_preds = {}
+    model_preds =0
+                
+    # Iterate over batches
+    start_time = time.time()
+    for start in range(0, num_keys, batch_size):
+        # end index of the batch
+        end = min(start + batch_size, num_keys)
+        
+        # Get one bacth of spots in a dictionary form
+        batch_of_spots = {key: bndbox_values[key] for key in all_spots_keys[start:end]}
 
+        ds = BatchImages(batch_of_spots,full_image,transform)
+        
+        dl = DataLoader(dataset = ds, batch_size = batch_size, shuffle = False, num_workers = 0)
+        
+        batch = next(iter(dl))
+        
+        with torch.no_grad():
+            outputs = model(batch)
+            model_preds +=1
+            _, preds = torch.max(outputs, dim=1)
+        
+        spots_preds_batch = {key: pred.item() for (key, _), pred in zip(batch_of_spots.items(), preds)}
+        spots_preds.update(spots_preds_batch)
+
+        
+    for key, pred in spots_preds.items():
+        bndbox = bndbox_values[key]
+        xmin = int(bndbox["xmin"])
+        ymin = int(bndbox["ymin"])
+        xmax = int(bndbox["xmax"])
+        ymax = int(bndbox["ymax"])
+        
+        color = (0, 0, 255) if pred == 1 else (0, 255, 0)
+        
+        cv2.rectangle(
+            image_to_draw,
+            (xmin, ymin),
+            (xmax, ymax),
+            color,
+            2,
+        )
+    print("Prediction time: %s seconds" % (time.time() - start_time))
+    print("Model predictions: ", model_preds)
+    return image_to_draw
+    
+    
 def predict(image_path, xml_dir, require_parsing):
     if require_parsing:
         tree = ET.parse(os.path.join("annotations", xml_dir))
@@ -116,16 +122,10 @@ def predict(image_path, xml_dir, require_parsing):
         open_cv_image = np.array(pil_image)
         # Convert RGB to BGR
         image_to_draw = open_cv_image[:, :, ::-1].copy()
+        
+    
 
-    # Transformations
-    transform = transforms.Compose(
-        [
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )
+    
     start_time = time.time()
     for key in bndbox_values:
         values = bndbox_values[key]
@@ -142,14 +142,14 @@ def predict(image_path, xml_dir, require_parsing):
         img = img.to(device)
         with torch.no_grad():
             outputs = model(img)
-            print(outputs)
             _, preds = torch.max(outputs, 1)
+            is_busy = preds[0]
+
         # ort_inputs = {ort_session.get_inputs()[0].name: to_numpy(img)}
         # ort_outs = ort_session.run(None, ort_inputs)
         # img_out_y = ort_outs[0]
         # preds = list()
         # [preds.append(np.argmax(pred)) for pred in img_out_y]
-            is_busy = preds[0]
 
         if is_busy == 1:
             # Busy 1 Red
