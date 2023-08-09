@@ -31,6 +31,7 @@ print("Loading model...")
 
 model = mAlexNet(num_classes=2).to(device)
 model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
+model = torch.jit.script(model)
 model.eval()
 
 
