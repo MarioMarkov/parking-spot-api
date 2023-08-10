@@ -1,6 +1,14 @@
 from torch.utils.data import Dataset
 from torchvision import transforms
 import torch.nn as nn
+import torch.quantization
+
+import torch.ao.quantization.qconfig_mapping
+from torch.ao.quantization import (
+    QConfigMapping,
+)
+import torch.ao.quantization.quantize_fx as quantize_fx
+import copy
 
 # Transformations
 transform = transforms.Compose(
@@ -11,6 +19,8 @@ transform = transforms.Compose(
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ]
 )
+
+
 
 
 class BatchImages(Dataset):
@@ -36,7 +46,6 @@ class BatchImages(Dataset):
         image = self.patches_batch[idx]
         tranformed = self.transforms(image)
         return tranformed
-
 
 class mAlexNet(nn.Module):
     def __init__(self, num_classes=2):
@@ -78,7 +87,33 @@ class mAlexNet(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         x = self.layer4(x)
         logits = self.layer5(x)
         return logits
+
+def fuse_model(model):
+    modules_to_fuse = [
+    ['layer1.0', 'layer1.1'],
+    ['layer2.0', 'layer2.1'],
+    ['layer3.0', 'layer3.1'],
+    ['layer4.0', 'layer4.1'],
+    ]
+
+    model_fused = torch.quantization.fuse_modules(model, modules_to_fuse, inplace=False)
+    
+    return model_fused
+
+def dynamic_quantize_model(model):
+    torch.backends.quantized.engine = 'qnnpack'
+    model_to_quantize = copy.deepcopy(model)
+    model_to_quantize.eval()
+    qconfig_mapping = QConfigMapping().set_global(torch.ao.quantization.default_dynamic_qconfig)
+   
+    # prepare
+    model_prepared = quantize_fx.prepare_fx(model_to_quantize, qconfig_mapping, torch.rand((1,3,224,224)).cpu())
+    # no calibration needed when we only have dynamic/weight_only quantization
+    # quantize
+    model__dynamic_quantized = quantize_fx.convert_fx(model_prepared)
+    
+    return model__dynamic_quantized

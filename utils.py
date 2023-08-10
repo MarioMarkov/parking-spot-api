@@ -7,7 +7,8 @@ import xml.etree.ElementTree as ET
 from torch.utils.data import DataLoader
 import time
 import onnxruntime
-from model_utils import mAlexNet, BatchImages, transform
+from model_utils import dynamic_quantize_model, fuse_model, mAlexNet, BatchImages, transform
+
 device = (
     "cuda"
     if torch.cuda.is_available()
@@ -15,7 +16,7 @@ device = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
-print("Device is:",device)
+print("Device is:", device)
 model_path = "m_alex_net.pth"
 
 
@@ -27,12 +28,15 @@ def to_numpy(tensor):
 
 print("Loading model...")
 
-#ort_session = onnxruntime.InferenceSession("onxx_malex_net.onnx")
+# ort_session = onnxruntime.InferenceSession("onxx_malex_net.onnx")
 
 model = mAlexNet(num_classes=2).to(device)
 model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
-model = torch.jit.script(model)
+model = fuse_model(model)
+model = dynamic_quantize_model(model)
+#model = torch.jit.script(model)
 model.eval()
+print(model)
 
 
 def extract_bndbox_values(tree):
@@ -48,6 +52,7 @@ def extract_bndbox_values(tree):
     }
     return bndbox_values
 
+
 def predictv2(image_path, xml_dir):
     full_image = image_path
     bndbox_values = extract_bndbox_values(xml_dir)
@@ -55,49 +60,50 @@ def predictv2(image_path, xml_dir):
     open_cv_image = np.array(pil_image)
     # Convert RGB to BGR
     image_to_draw = open_cv_image[:, :, ::-1].copy()
-    
+
     # Every key is one spot
     all_spots_keys = list(bndbox_values.keys())
     num_keys = len(all_spots_keys)
     batch_size = 16
-    
+
     # Make dictionary with every spot as key and value which will be the prediction
     spots_preds = {}
-    model_preds =0
-                
+    model_preds = 0
+
     # Iterate over batches
     start_time = time.time()
     for start in range(0, num_keys, batch_size):
         # end index of the batch
         end = min(start + batch_size, num_keys)
-        
+
         # Get one bacth of spots in a dictionary form
         batch_of_spots = {key: bndbox_values[key] for key in all_spots_keys[start:end]}
 
-        ds = BatchImages(batch_of_spots,full_image,transform)
-        
-        dl = DataLoader(dataset = ds, batch_size = batch_size, shuffle = False, num_workers = 0)
-        
+        ds = BatchImages(batch_of_spots, full_image, transform)
+
+        dl = DataLoader(dataset=ds, batch_size=batch_size, shuffle=False, num_workers=0)
+
         batch = next(iter(dl))
-        
+
         with torch.no_grad():
             outputs = model(batch)
-            model_preds +=1
+            model_preds += 1
             _, preds = torch.max(outputs, dim=1)
-        
-        spots_preds_batch = {key: pred.item() for (key, _), pred in zip(batch_of_spots.items(), preds)}
+
+        spots_preds_batch = {
+            key: pred.item() for (key, _), pred in zip(batch_of_spots.items(), preds)
+        }
         spots_preds.update(spots_preds_batch)
 
-        
     for key, pred in spots_preds.items():
         bndbox = bndbox_values[key]
         xmin = int(bndbox["xmin"])
         ymin = int(bndbox["ymin"])
         xmax = int(bndbox["xmax"])
         ymax = int(bndbox["ymax"])
-        
+
         color = (0, 0, 255) if pred == 1 else (0, 255, 0)
-        
+
         cv2.rectangle(
             image_to_draw,
             (xmin, ymin),
@@ -108,8 +114,8 @@ def predictv2(image_path, xml_dir):
     print("Prediction time: %s seconds" % (time.time() - start_time))
     print("Model predictions: ", model_preds)
     return image_to_draw
-    
-    
+
+
 def predict(image_path, xml_dir, require_parsing):
     if require_parsing:
         tree = ET.parse(os.path.join("annotations", xml_dir))
@@ -123,10 +129,7 @@ def predict(image_path, xml_dir, require_parsing):
         open_cv_image = np.array(pil_image)
         # Convert RGB to BGR
         image_to_draw = open_cv_image[:, :, ::-1].copy()
-        
-    
 
-    
     start_time = time.time()
     for key in bndbox_values:
         values = bndbox_values[key]
