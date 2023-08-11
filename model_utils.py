@@ -22,8 +22,6 @@ transform = transforms.Compose(
 )
 
 
-
-
 class BatchImages(Dataset):
     def __init__(self, batch_of_spots, full_image, transform):
         self.batch_of_spots = batch_of_spots
@@ -47,6 +45,7 @@ class BatchImages(Dataset):
         image = self.patches_batch[idx]
         tranformed = self.transforms(image)
         return tranformed
+
 
 class mAlexNet(nn.Module):
     def __init__(self, num_classes=2):
@@ -93,39 +92,62 @@ class mAlexNet(nn.Module):
         logits = self.layer5(x)
         return logits
 
+
 def fuse_model(model):
     modules_to_fuse = [
-    ['layer1.0', 'layer1.1'],
-    ['layer2.0', 'layer2.1'],
-    ['layer3.0', 'layer3.1'],
-    ['layer4.0', 'layer4.1'],
+        ["layer1.0", "layer1.1"],
+        ["layer2.0", "layer2.1"],
+        ["layer3.0", "layer3.1"],
+        ["layer4.0", "layer4.1"],
     ]
 
     model_fused = torch.quantization.fuse_modules(model, modules_to_fuse, inplace=False)
-    
+
     return model_fused
 
+
 def dynamic_quantize_model(model):
-    torch.backends.quantized.engine = 'qnnpack'
+    torch.backends.quantized.engine = "qnnpack"
     model_to_quantize = copy.deepcopy(model)
     model_to_quantize.eval()
-    qconfig_mapping = QConfigMapping().set_global(torch.ao.quantization.default_dynamic_qconfig)
-   
+    qconfig_mapping = QConfigMapping().set_global(
+        torch.ao.quantization.default_dynamic_qconfig
+    )
+
     # prepare
-    model_prepared = quantize_fx.prepare_fx(model_to_quantize, qconfig_mapping, torch.rand((1,3,224,224)).cpu())
+    model_prepared = quantize_fx.prepare_fx(
+        model_to_quantize, qconfig_mapping, torch.rand((1, 3, 224, 224)).cpu()
+    )
     # no calibration needed when we only have dynamic/weight_only quantization
     # quantize
     model__dynamic_quantized = quantize_fx.convert_fx(model_prepared)
-    
+
     return model__dynamic_quantized
+
 
 def static_quantize_model(model):
     model_to_quantize = copy.deepcopy(model)
     qconfig_mapping = get_default_qconfig_mapping("qnnpack")
     model_to_quantize.eval()
     # prepare
-    example_inputs = torch.rand(1,3,224,224)
-    model_prepared = quantize_fx.prepare_fx(model_to_quantize, qconfig_mapping, example_inputs)
-    torch.backends.quantized.engine = 'qnnpack'
+    example_inputs = torch.rand(1, 3, 224, 224)
+    model_prepared = quantize_fx.prepare_fx(
+        model_to_quantize, qconfig_mapping, example_inputs
+    )
+    torch.backends.quantized.engine = "qnnpack"
     model_quantized = quantize_fx.convert_fx(model_prepared)
     return model_quantized
+
+
+def extract_bndbox_values(tree):
+    root = tree.getroot()
+    bndbox_values = {
+        f"{obj.find('name').text}{i}": {
+            "xmin": float(obj.find("bndbox/xmin").text),
+            "ymin": float(obj.find("bndbox/ymin").text),
+            "xmax": float(obj.find("bndbox/xmax").text),
+            "ymax": float(obj.find("bndbox/ymax").text),
+        }
+        for i, obj in enumerate(root.findall("object"))
+    }
+    return bndbox_values

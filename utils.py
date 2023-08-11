@@ -38,9 +38,11 @@ print("Loading model...")
 # ort_session = onnxruntime.InferenceSession("onxx_malex_net.onnx")
 
 model = mAlexNet(num_classes=2).to(device)
-#model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
+# model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
 model = static_quantize_model(model)
-model.load_state_dict(torch.load("model_qunatized_static.pt",map_location=torch.device(device)))
+model.load_state_dict(
+    torch.load("model_qunatized_static.pt", map_location=torch.device(device))
+)
 
 # model = fuse_model(model)
 # model = dynamic_quantize_model(model)
@@ -49,26 +51,14 @@ model.eval()
 print(model)
 
 
-def extract_bndbox_values(tree):
-    root = tree.getroot()
-    bndbox_values = {
-        f"{obj.find('name').text}{i}": {
-            "xmin": float(obj.find("bndbox/xmin").text),
-            "ymin": float(obj.find("bndbox/ymin").text),
-            "xmax": float(obj.find("bndbox/xmax").text),
-            "ymax": float(obj.find("bndbox/ymax").text),
-        }
-        for i, obj in enumerate(root.findall("object"))
-    }
-    return bndbox_values
-
-
-def predictv2(full_image, xml_dir):
-    bndbox_values = extract_bndbox_values(xml_dir)
-    pil_image = full_image.convert("RGB")
-    open_cv_image = np.array(pil_image)
+def predictv2(full_image, bndbox_values):
+    start_time = time.time()
+    # pil_image = full_image.convert("RGB")
+    image_to_draw = cv2.cvtColor(np.array(full_image), cv2.COLOR_RGB2BGR)
     # Convert RGB to BGR
-    image_to_draw = open_cv_image[:, :, ::-1].copy()
+    # image_to_draw = np.array(pil_image)
+    # image_to_draw[:, :, [0, 2]] = image_to_draw[:, :, [2, 0]]
+    print("Data Tranformation time: %s seconds" % (time.time() - start_time))
 
     # Every key is one spot
     all_spots_keys = list(bndbox_values.keys())

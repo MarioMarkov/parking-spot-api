@@ -1,6 +1,7 @@
 import io
 import cv2
 import base64
+from model_utils import extract_bndbox_values
 from utils import predict, predictv2
 from PIL import Image as PILImage
 import xml.etree.ElementTree as ET
@@ -41,7 +42,8 @@ async def get_prediction(image: UploadFile, annotations: UploadFile):
 
     # Get predicted image
     start_time = time.time()
-    result_image = predictv2(image_obj, xml_obj)
+    bnbx_values = extract_bndbox_values(xml_obj)
+    result_image = predictv2(image_obj,bnbx_values )
     print("Get prediction time: %s seconds" % (time.time() - start_time))
 
     start_time = time.time()
