@@ -7,7 +7,14 @@ import xml.etree.ElementTree as ET
 from torch.utils.data import DataLoader
 import time
 import onnxruntime
-from model_utils import dynamic_quantize_model, fuse_model, mAlexNet, BatchImages, transform
+from model_utils import (
+    dynamic_quantize_model,
+    fuse_model,
+    mAlexNet,
+    BatchImages,
+    static_quantize_model,
+    transform,
+)
 
 device = (
     "cuda"
@@ -31,10 +38,13 @@ print("Loading model...")
 # ort_session = onnxruntime.InferenceSession("onxx_malex_net.onnx")
 
 model = mAlexNet(num_classes=2).to(device)
-model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
-model = fuse_model(model)
-model = dynamic_quantize_model(model)
-#model = torch.jit.script(model)
+#model.load_state_dict(torch.load(model_path, map_location=torch.device(device)))
+model = static_quantize_model(model)
+model.load_state_dict(torch.load("model_qunatized_static.pt",map_location=torch.device(device)))
+
+# model = fuse_model(model)
+# model = dynamic_quantize_model(model)
+# model = torch.jit.script(model)
 model.eval()
 print(model)
 
@@ -53,8 +63,7 @@ def extract_bndbox_values(tree):
     return bndbox_values
 
 
-def predictv2(image_path, xml_dir):
-    full_image = image_path
+def predictv2(full_image, xml_dir):
     bndbox_values = extract_bndbox_values(xml_dir)
     pil_image = full_image.convert("RGB")
     open_cv_image = np.array(pil_image)

@@ -6,6 +6,7 @@ import torch.quantization
 import torch.ao.quantization.qconfig_mapping
 from torch.ao.quantization import (
     QConfigMapping,
+    get_default_qconfig_mapping,
 )
 import torch.ao.quantization.quantize_fx as quantize_fx
 import copy
@@ -117,3 +118,14 @@ def dynamic_quantize_model(model):
     model__dynamic_quantized = quantize_fx.convert_fx(model_prepared)
     
     return model__dynamic_quantized
+
+def static_quantize_model(model):
+    model_to_quantize = copy.deepcopy(model)
+    qconfig_mapping = get_default_qconfig_mapping("qnnpack")
+    model_to_quantize.eval()
+    # prepare
+    example_inputs = torch.rand(1,3,224,224)
+    model_prepared = quantize_fx.prepare_fx(model_to_quantize, qconfig_mapping, example_inputs)
+    torch.backends.quantized.engine = 'qnnpack'
+    model_quantized = quantize_fx.convert_fx(model_prepared)
+    return model_quantized
