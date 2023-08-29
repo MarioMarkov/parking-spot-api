@@ -2,6 +2,8 @@
 
 ### Parking spot detection API build with FAST API 
 
+#### deployed on: https://parking-spot-api-2.onrender.com
+
 The api has a UI on the / route on which you can downlaod exmplae image and aanotation that can be uploaded again to get a prediction. 
 The prediction will take about 30 seconds due to the fact that the model is deployed on a server with very weak ressources.
 
