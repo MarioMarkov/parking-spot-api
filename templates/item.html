@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload a parking image with annotations</title>
+    <style>
+        img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        /* FLEXBOX */
+        .flex-container {
+            display: flex;
+        }
+
+        .flex-item {
+            flex: 1;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .flex-item img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        /* Progress bar
+        #myProgress {
+            width: 100%;
+            background-color: #ddd;
+        }
+
+        #myBar {
+            width: 1%;
+            height: 30px;
+            background-color: #04AA6D;
+        } */
+        </style>
+</head>
+
+<body>
+    <h1>Image Uploader</h1>
+    <a href="example/example_image.jpg" download>
+        <button>Download Image</button>
+    </a>
+    <a href="example/example_annotation.xml" download>
+        <button>Download Annotation</button>
+    </a>
+    <br><br>
+   
+    <br><hr>
+    <input id="image-input" name="image_uploads" type="file" accept="image/*" required>
+    <input type="file" id="anno-input" accept="text/xml" required>
+    <button id="predict-button">Predict</button>
+    <div class="flex-container">
+        <div class="flex-item">
+            <div id="image-container"></div>
+        </div>
+        <div class="flex-item">
+            <div id="result-image"></div>
+        </div>
+    </div>
+
+    <!-- <div class="container">
+        <progress id="progress-bar" value="0" max="100"></progress><br>
+        <label for="progress-bar">0%</label>
+      </div> -->
+
+    <script src="static/app.js"></script>
+</body>
+
+</html>

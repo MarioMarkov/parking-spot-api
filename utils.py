@@ -53,11 +53,8 @@ print(model)
 
 def predictv2(full_image, bndbox_values):
     start_time = time.time()
-    # pil_image = full_image.convert("RGB")
-    image_to_draw = cv2.cvtColor(np.array(full_image), cv2.COLOR_RGB2BGR)
     # Convert RGB to BGR
-    # image_to_draw = np.array(pil_image)
-    # image_to_draw[:, :, [0, 2]] = image_to_draw[:, :, [2, 0]]
+    image_to_draw = cv2.cvtColor(np.array(full_image), cv2.COLOR_RGB2BGR)
     print("Data Tranformation time: %s seconds" % (time.time() - start_time))
 
     # Every key is one spot
