@@ -48,10 +48,9 @@ class BatchImages(Dataset):
 
 
 class mAlexNet(nn.Module):
-    def __init__(self, num_classes=2):
+    def __init__(self):
         super().__init__()
         self.input_channel = 3
-        self.num_output = num_classes
         self.layer1 = nn.Sequential(
             nn.Conv2d(
                 in_channels=self.input_channel,
@@ -79,18 +78,18 @@ class mAlexNet(nn.Module):
             nn.Linear(30 * 3 * 3, out_features=48), nn.ReLU(inplace=True)
         )
 
-        self.layer5 = nn.Sequential(
-            nn.Linear(in_features=48, out_features=self.num_output)
-        )
-
+        self.layer5 = nn.Linear(in_features=48, out_features=1)
+        
     def forward(self, x):
+        # Convolutions
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
+        
+        # Classificator
         x = x.reshape(x.size(0), -1)
         x = self.layer4(x)
-        logits = self.layer5(x)
-        return logits
+        return self.layer5(x)
 
 
 def fuse_model(model):
@@ -125,18 +124,18 @@ def dynamic_quantize_model(model):
     return model__dynamic_quantized
 
 
-def static_quantize_model(model):
-    model_to_quantize = copy.deepcopy(model)
-    qconfig_mapping = get_default_qconfig_mapping("qnnpack")
-    model_to_quantize.eval()
-    # prepare
-    example_inputs = torch.rand(1, 3, 224, 224)
-    model_prepared = quantize_fx.prepare_fx(
-        model_to_quantize, qconfig_mapping, example_inputs
-    )
-    torch.backends.quantized.engine = "qnnpack"
-    model_quantized = quantize_fx.convert_fx(model_prepared)
-    return model_quantized
+# def static_quantize_model(model):
+#     model_to_quantize = copy.deepcopy(model)
+#     #qconfig_mapping = get_default_qconfig_mapping("qnnpack")
+#     model_to_quantize.eval()
+#     # prepare
+#     example_inputs = torch.rand(1, 3, 224, 224)
+#     model_prepared = quantize_fx.prepare_fx(
+#         model_to_quantize, qconfig_mapping, example_inputs
+#     )
+#     #torch.backends.quantized.engine = "qnnpack"
+#     model_quantized = quantize_fx.convert_fx(model_prepared)
+#     return model_quantized
 
 
 def extract_bndbox_values(tree):

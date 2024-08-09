@@ -5,17 +5,20 @@ import base64
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from model_utils import extract_bndbox_values
-from utils import predict, predictv2
+from utils import predictv2
 from PIL import Image as PILImage
 import xml.etree.ElementTree as ET
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import time
 from fastapi.templating import Jinja2Templates
+
+
 templates = Jinja2Templates(directory="templates")
 
 app = FastAPI()
-app.mount('/static', StaticFiles(directory='static', html=True), name='static')
+app.mount('/static', StaticFiles(directory='static'), name='static')
+
 
 origins = [
     "*",
@@ -35,8 +38,9 @@ async def home(request: Request):
     return templates.TemplateResponse("item.html", {"request": request})
 
 
-@app.post("/prediction/")
+@app.post("/prediction")
 async def get_prediction(image: UploadFile, annotations: UploadFile):
+    print("Predicting")
     start_time = time.time()
 
     # Read bites image to Pillow image
