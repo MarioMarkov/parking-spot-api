@@ -19,3 +19,5 @@ urllib3==2.0.4
 uvicorn==0.23.2
 python-multipart 
 onnxruntime
+torch==2.4.0
+torchvision==0.19.0
