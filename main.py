@@ -1,17 +1,26 @@
 import io
+import os 
 import cv2
+import time
 import base64
-
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from model_utils import extract_bndbox_values
-from utils import predictv2
 from PIL import Image as PILImage
 import xml.etree.ElementTree as ET
+
+
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-import time
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+from utils import predictv2
+from model_utils import extract_bndbox_values
+
+
+from dotenv import load_dotenv
+
+# Load the .env file
+load_dotenv()
 
 
 templates = Jinja2Templates(directory="templates")
@@ -35,7 +44,8 @@ app.add_middleware(
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("item.html", {"request": request})
+
+    return templates.TemplateResponse("item.html", {"request": request,  "env_var": os.environ["DEPLOYMENT_URL"]})
 
 
 @app.post("/prediction")

@@ -4,6 +4,7 @@ var xmlInput = document.getElementById("anno-input");
 var resultContainer = document.getElementById("result-image");
 const progress = document.getElementById("progress-bar");
 
+
 predictButton.addEventListener("click", function () {
   console.log('button clicked')
   const image = fileInput.files[0];
@@ -37,9 +38,10 @@ predictButton.addEventListener("click", function () {
   // req.send(formData);
   //http://127.0.0.1:8000
   //https://parking-spot-api-2.onrender.com
-  const inference_url = "http://127.0.0.1:8000";
+  //const inference_url = "http://127.0.0.1:8000";
+  const inference_url = window.env.DEPLOYMENT_URL;
   console.log("inference url: ",inference_url )
-  //const inference_url = "https://parking-spot-api-2.onrender.com";
+
   fetch(`${inference_url}/prediction`, {
     method: "POST",
     body: formData,

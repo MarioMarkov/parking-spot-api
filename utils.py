@@ -27,7 +27,7 @@ model_path = "models/m_alex_net_both_best_acc.pth"
 model = mAlexNet().to(device)
 
 model.load_state_dict(
-    torch.load(model_path, map_location=torch.device(device))
+    torch.load(model_path, map_location=torch.device(device), weights_only=True)
 )
 model.eval()
 

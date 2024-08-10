@@ -2,6 +2,11 @@
 <html>
 <head>
     <title>Upload a parking image with annotations</title>
+    <script>
+        window.env = {
+            DEPLOYMENT_URL: "{{ env_var }}"
+        };
+    </script>
     <style>
         img {
             max-width: 100%;
