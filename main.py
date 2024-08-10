@@ -1,20 +1,18 @@
 import io
-import os 
+import os
 import cv2
 import time
 import base64
 from PIL import Image as PILImage
-import xml.etree.ElementTree as ET
 
-
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from fastapi import FastAPI, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
-from utils import predictv2
-from model_utils import extract_bndbox_values
+from utils.inference_utils import predict
+from utils.model_utils import extract_bndbox_values
 
 
 from dotenv import load_dotenv
@@ -26,7 +24,7 @@ load_dotenv()
 templates = Jinja2Templates(directory="templates")
 
 app = FastAPI()
-app.mount('/static', StaticFiles(directory='static'), name='static')
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 origins = [
@@ -45,25 +43,31 @@ app.add_middleware(
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
 
-    return templates.TemplateResponse("item.html", {"request": request,  "env_var": os.environ["DEPLOYMENT_URL"]})
+    return templates.TemplateResponse(
+        "item.html", {"request": request, "env_var": os.environ["DEPLOYMENT_URL"]}
+    )
 
 
 @app.post("/prediction")
 async def get_prediction(image: UploadFile, annotations: UploadFile):
-    print("Predicting")
     start_time = time.time()
 
     # Read bites image to Pillow image
     image_obj = PILImage.open(io.BytesIO(await image.read()))
-
     # Read annotations
-    xml_obj = ET.parse(io.BytesIO(await annotations.read()))
     print("Encoding data time: %s seconds" % (time.time() - start_time))
 
     # Get predicted image
     start_time = time.time()
-    bnbx_values = extract_bndbox_values(xml_obj)
-    result_image = predictv2(image_obj,bnbx_values )
+
+    annotation_file = io.BytesIO(await annotations.read())
+
+    bnbx_values = extract_bndbox_values(annotation_file)
+
+    result_image = predict(
+        image_obj, bnbx_values, video=False, batch_size=8, threshhold=0.6
+    )
+
     print("Get prediction time: %s seconds" % (time.time() - start_time))
 
     start_time = time.time()
@@ -79,6 +83,24 @@ async def get_prediction(image: UploadFile, annotations: UploadFile):
         "encoded_img": encoded_img_base64,
     }
 
+
+@app.get("/video")
+def get_video():
+    file_path = "./example/parking_video.mp4"  # replace with your video file path
+
+    # Open video file in binary mode
+    def iterfile():
+        with open(file_path, mode="rb") as file_like:
+            yield from file_like
+
+    # Return a streaming response
+    return StreamingResponse(iterfile(), media_type="video/mp4")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", host="localhost", port=8000, reload=True)
 
 # @app.get("/prediction_from_local/",include_in_schema=False)
 # async def get_prediction(filename: str | None):
