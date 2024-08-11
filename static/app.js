@@ -9,7 +9,6 @@ predictButton.addEventListener("click", function () {
   console.log('button clicked')
   const image = fileInput.files[0];
   const annotations = xmlInput.files[0];
-  console.log("inference url: ",image )
 
   if (!annotations || !image) {
     alert("Please select an image file and annotation.");
@@ -22,7 +21,7 @@ predictButton.addEventListener("click", function () {
 
 
   const inference_url = window.env.DEPLOYMENT_URL;
-  console.log("inference url: ",inference_url )
+  console.log("inference url: ", inference_url )
 
   fetch(`${inference_url}/prediction`, {
     method: "POST",

@@ -8,7 +8,7 @@ from PIL import Image as PILImage
 from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi import FastAPI, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from utils.inference_utils import predict
@@ -16,6 +16,8 @@ from utils.model_utils import extract_bndbox_values
 
 
 from dotenv import load_dotenv
+
+from video_predict import gen_streaming_frames, gen_video_chunks
 
 # Load the .env file
 load_dotenv()
@@ -97,45 +99,76 @@ def get_video():
     return StreamingResponse(iterfile(), media_type="video/mp4")
 
 
+@app.get("/video")
+def get_video():
+    file_path = "video_chunks\output_chunk.mp4"
+
+    # Return a streaming response
+    return FileResponse(file_path, media_type="video/mp4")
+
+
+@app.get("/video_chunk/{start_second}/parking_video.mp4")
+async def get_video_chunk(start_second: int):
+    video_path = f"video_chunks\output_chunk_st_{start_second}_end_{start_second+5}.mp4"
+
+    if not os.path.exists(video_path):
+        print("video chunk does not exist, generating...")
+        annotation_path = "./example/pg_survailance.xml"
+        print(f"Starting from second {start_second}")
+        bndbox_values = extract_bndbox_values(annotation_path)
+
+        gen_video_chunks(
+            "./example/parking_video.mp4",
+            step=60,
+            bndbox_values=bndbox_values,
+            start_second=start_second,
+        )
+
+    # Check if the file exists
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Serve the video file
+    return FileResponse(video_path, media_type="video/mp4")
+
+
+@app.get("/video_pred")
+def get_video():
+    video_path = "./example/parking_video.mp4"
+    annotation_path = "./example/pg_survailance.xml"
+
+    bndbox_values = extract_bndbox_values(annotation_path)
+
+    # Return a streaming response
+    return StreamingResponse(
+        gen_streaming_frames(video_path, step=60, bndbox_values=bndbox_values),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@app.get("/video-stream.m3u8")
+def video_stream():
+    return FileResponse("stream/stream.m3u8")
+
+
+@app.get("/segments/{segment_name}")
+def video_segments(segment_name: str):
+    return FileResponse(f"stream/{segment_name}")
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="localhost", port=8000, reload=True)
+    if os.environ["DEPLOYMENT_URL"] == "http://localhost:8000":
+        import ngrok
 
-# @app.get("/prediction_from_local/",include_in_schema=False)
-# async def get_prediction(filename: str | None):
-#     image_dir = os.path.join("images", filename)
-#     xml_file = [
-#         file
-#         for file in os.listdir("annotations")
-#         if file.endswith(".xml") and os.path.splitext(file)[0] == filename.split(".")[0]
-#     ]
-#     result_image = predict(image_dir, xml_file[0], require_parsing=True)
+        port = 8000
+        listener = ngrok.forward(
+            f"http://localhost:{port}",
+            authtoken_from_env=True,
+            domain="possum-enough-informally.ngrok-free.app",
+        )
+        public_url = listener.url()
+        print(f"Waiting on public url: {public_url}")
 
-#     return {"image": result_image}
-
-
-# @app.post("/upload_annotation/")
-# async def upload_image(annotation: UploadFile,include_in_schema=False):
-#     # Create the "images" directory if it doesn't exist
-#     os.makedirs("annotations", exist_ok=True)
-
-#     # Save the uploaded image to the "images" directory
-#     file_path = os.path.join("annotations", annotation.filename)
-#     with open(file_path, "wb") as file:
-#         file.write(await annotation.read())
-
-#     return {"image": {"filename": annotation.filename}}
-
-
-# @app.post("/upload_image/")
-# async def upload_image(image: UploadFile,include_in_schema=False):
-#     # Create the "images" directory if it doesn't exist
-#     # os.makedirs("images", exist_ok=True)
-
-#     # Save the uploaded image to the "images" directory
-#     file_path = os.path.join("images", image.filename)
-#     with open(file_path, "wb") as file:
-#         file.write(await image.read())
-
-#     return {"image": {"filename": image.filename}}
+    uvicorn.run("main:app", host="localhost", port=port, reload=False)
