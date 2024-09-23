@@ -26,8 +26,8 @@ load_dotenv()
 templates = Jinja2Templates(directory="templates")
 
 app = FastAPI()
-#app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/static/example", StaticFiles(directory="example"), name="example")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+#app.mount("/static/example", StaticFiles(directory="example"), name="example")
 
 
 origins = [

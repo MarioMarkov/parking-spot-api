@@ -1,12 +1,8 @@
-import os
 import cv2
 import torch
 import numpy as np
-from PIL import Image
-import xml.etree.ElementTree as ET
 from torch.utils.data import DataLoader
 import time
-import onnxruntime
 from utils.model_utils import (
     mAlexNet,
     BatchImages,
